@@ -44,9 +44,10 @@ function fft.generate_fft_interface(itype, dtype)
 
   local iface = {}
 
-  struct iface.plan {
+  local fspace iface_plan {
     p : fftw_c.fftw_plan,
   }
+  iface.plan = iface_plan
 
   local terra get_base(rect : rect_t,
                  physical : c.legion_physical_region_t,
@@ -75,14 +76,21 @@ function fft.generate_fft_interface(itype, dtype)
   -- Important: overwrites input/output!
   __demand(__inline)
   task iface.make_plan(input : region(ispace(itype), dtype),
-                       output : region(ispace(itype), dtype))
-  where reads writes(input, output) do
+                       output : region(ispace(itype), dtype),
+                       plan : region(ispace(int1d), iface.plan))
+  where reads writes(input, output, plan) do
+    var p : int1d(iface.plan, plan)
+    for x in plan do
+      p = x
+      break
+    end
+
     regentlib.assert(input.ispace.bounds == output.ispace.bounds, "input and output regions must be identical in size")
     var input_base = get_base(rect_t(input.ispace.bounds), __physical(input)[0], __fields(input)[0])
     var output_base = get_base(rect_t(output.ispace.bounds), __physical(output)[0], __fields(output)[0])
     var lo = input.ispace.bounds.lo:to_point()
     var hi = input.ispace.bounds.hi:to_point()
-    return iface.plan {
+    @p = iface.plan {
       plan_dft(
         [data.range(dim):map(function(i) return rexpr hi.x[i] - lo.x[i] + 1 end end)],
         [&fftw_c.fftw_complex](input_base),
@@ -95,13 +103,28 @@ function fft.generate_fft_interface(itype, dtype)
   __demand(__inline)
   task iface.execute_plan(input : region(ispace(itype), dtype),
                           output : region(ispace(itype), dtype),
-                          p : iface.plan)
-  where reads(input), writes(output) do
-    fftw_c.fftw_execute(p.p)
+                          plan : region(ispace(int1d), iface.plan))
+  where reads(input, plan), writes(output) do
+    var p : int1d(iface.plan, plan)
+    for x in plan do
+      p = x
+      break
+    end
+
+    var input_base = get_base(rect_t(input.ispace.bounds), __physical(input)[0], __fields(input)[0])
+    var output_base = get_base(rect_t(output.ispace.bounds), __physical(output)[0], __fields(output)[0])
+    fftw_c.fftw_execute_dft(p.p, [&fftw_c.fftw_complex](input_base), [&fftw_c.fftw_complex](output_base))
   end
 
   __demand(__inline)
-  task iface.destroy_plan(p : iface.plan)
+  task iface.destroy_plan(plan : region(ispace(int1d), iface.plan))
+  where reads writes(plan) do
+    var p : int1d(iface.plan, plan)
+    for x in plan do
+      p = x
+      break
+    end
+
     fftw_c.fftw_destroy_plan(p.p)
   end
 
