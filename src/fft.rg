@@ -44,21 +44,56 @@ terra get_base(rect : c.legion_rect_1d_t,
   return base_pointer
 end
 
+struct plan {
+    p : fftw_c.fftw_plan,
+}
+
+-- Important: overwrites input/output!
+__demand(__inline)
+task make_plan(input : region(ispace(int1d), complex64),
+               output : region(ispace(int1d), complex64))
+where reads writes(input, output) do
+  regentlib.assert(input.ispace.bounds == output.ispace.bounds, "input and output regions must be identical in size")
+  var input_base = get_base(
+    c.legion_rect_1d_t(input.ispace.bounds),
+    __physical(input)[0],
+    __fields(input)[0])
+  var output_base = get_base(
+    c.legion_rect_1d_t(output.ispace.bounds),
+    __physical(output)[0],
+    __fields(output)[0])
+  return plan {
+    fftw_c.fftw_plan_dft_1d(
+      input.ispace.volume,
+      [&fftw_c.fftw_complex](input_base),
+      [&fftw_c.fftw_complex](output_base),
+      fftw_c.FFTW_FORWARD,
+      fftw_c.FFTW_ESTIMATE)
+  }
+end
+
+__demand(__inline)
+task execute_plan(input : region(ispace(int1d), complex64),
+                  output : region(ispace(int1d), complex64),
+                  p : plan)
+where reads(input), writes(output) do
+  fftw_c.fftw_execute(p.p)
+end
+
+__demand(__inline)
+task destroy_plan(p : plan)
+  fftw_c.fftw_destroy_plan(p.p)
+end
+
 task main()
   var r = region(ispace(int1d, 128), complex64)
   var s = region(ispace(int1d, 128), complex64)
   fill(r, 0)
   fill(s, 0)
-  -- Important: overwrites input/output!
-  var p = fftw_c.fftw_plan_dft_1d(
-    r.ispace.volume,
-    [&fftw_c.fftw_complex](get_base(c.legion_rect_1d_t(r.ispace.bounds), __physical(r)[0], __fields(r)[0])),
-    [&fftw_c.fftw_complex](get_base(c.legion_rect_1d_t(s.ispace.bounds), __physical(s)[0], __fields(s)[0])),
-    fftw_c.FFTW_FORWARD,
-    fftw_c.FFTW_ESTIMATE)
+  var p = make_plan(r, s)
   fill(r, 0)
   fill(s, 0)
-  fftw_c.fftw_execute(p)
-  fftw_c.fftw_destroy_plan(p)
+  execute_plan(r, s, p)
+  destroy_plan(p)
 end
 regentlib.start(main)
