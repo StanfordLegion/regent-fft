@@ -46,6 +46,7 @@ function fft.generate_fft_interface(itype, dtype)
 
   local fspace iface_plan {
     p : fftw_c.fftw_plan,
+    address_space : c.legion_address_space_t,
   }
   iface.plan = iface_plan
 
@@ -85,18 +86,22 @@ function fft.generate_fft_interface(itype, dtype)
       break
     end
 
+    var address_space = c.legion_processor_address_space(
+      c.legion_runtime_get_executing_processor(__runtime(), __context()))
+
     regentlib.assert(input.ispace.bounds == output.ispace.bounds, "input and output regions must be identical in size")
     var input_base = get_base(rect_t(input.ispace.bounds), __physical(input)[0], __fields(input)[0])
     var output_base = get_base(rect_t(output.ispace.bounds), __physical(output)[0], __fields(output)[0])
     var lo = input.ispace.bounds.lo:to_point()
     var hi = input.ispace.bounds.hi:to_point()
     @p = iface.plan {
-      plan_dft(
+      p = plan_dft(
         [data.range(dim):map(function(i) return rexpr hi.x[i] - lo.x[i] + 1 end end)],
         [&fftw_c.fftw_complex](input_base),
         [&fftw_c.fftw_complex](output_base),
         fftw_c.FFTW_FORWARD,
-        fftw_c.FFTW_ESTIMATE)
+        fftw_c.FFTW_ESTIMATE),
+      address_space = address_space,
     }
   end
 
@@ -111,6 +116,10 @@ function fft.generate_fft_interface(itype, dtype)
       break
     end
 
+    var address_space = c.legion_processor_address_space(
+      c.legion_runtime_get_executing_processor(__runtime(), __context()))
+    regentlib.assert(p.address_space == address_space, "plans can only be used on the node where they are originally created")
+
     var input_base = get_base(rect_t(input.ispace.bounds), __physical(input)[0], __fields(input)[0])
     var output_base = get_base(rect_t(output.ispace.bounds), __physical(output)[0], __fields(output)[0])
     fftw_c.fftw_execute_dft(p.p, [&fftw_c.fftw_complex](input_base), [&fftw_c.fftw_complex](output_base))
@@ -124,6 +133,10 @@ function fft.generate_fft_interface(itype, dtype)
       p = x
       break
     end
+
+    var address_space = c.legion_processor_address_space(
+      c.legion_runtime_get_executing_processor(__runtime(), __context()))
+    regentlib.assert(p.address_space == address_space, "plans can only be used on the node where they are originally created")
 
     fftw_c.fftw_destroy_plan(p.p)
   end
