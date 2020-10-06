@@ -38,6 +38,9 @@ def driver(thread_count):
     subprocess.check_call([os.path.join(fftw_src, 'configure'), '--enable-openmp', '--disable-mpi', '--with-pic', '--prefix=%s' % fftw_install], cwd=fftw_build)
     subprocess.check_call(['make', 'install', '-j%s' % thread_count], cwd=fftw_build)
 
+    with open(os.path.join(root_dir, 'env.sh'), 'w') as f:
+        f.write('export INCLUDE_PATH="$INCLUDE_PATH:%s"' % os.path.join(fftw_install, 'include'))
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Install Regent FFT library.')
