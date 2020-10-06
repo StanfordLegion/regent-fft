@@ -35,11 +35,16 @@ def driver(thread_count):
     subprocess.check_call(['curl', '-O', 'http://www.fftw.org/fftw-3.3.8.tar.gz'], cwd=root_dir)
     subprocess.check_call(['tar', 'xfz', fftw_tar], cwd=root_dir)
     os.mkdir(fftw_build)
-    subprocess.check_call([os.path.join(fftw_src, 'configure'), '--enable-openmp', '--disable-mpi', '--with-pic', '--prefix=%s' % fftw_install], cwd=fftw_build)
+    subprocess.check_call([os.path.join(fftw_src, 'configure'), '--enable-openmp', '--disable-mpi', '--enable-shared', '--with-pic', '--prefix=%s' % fftw_install], cwd=fftw_build)
     subprocess.check_call(['make', 'install', '-j%s' % thread_count], cwd=fftw_build)
 
     with open(os.path.join(root_dir, 'env.sh'), 'w') as f:
-        f.write('export INCLUDE_PATH="$INCLUDE_PATH:%s"' % os.path.join(fftw_install, 'include'))
+        f.write(r'''
+export INCLUDE_PATH="$INCLUDE_PATH;%s"
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:%s"
+''' % (
+    os.path.join(fftw_install, 'include'),
+    os.path.join(fftw_install, 'lib')))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
