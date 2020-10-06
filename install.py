@@ -42,9 +42,11 @@ def driver(thread_count):
         f.write(r'''
 export INCLUDE_PATH="$INCLUDE_PATH;%s"
 export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:%s"
+export TERRA_PATH="$TERRA_PATH;%s"
 ''' % (
     os.path.join(fftw_install, 'include'),
-    os.path.join(fftw_install, 'lib')))
+    os.path.join(fftw_install, 'lib'),
+    os.path.join(root_dir, 'src', '?.rg')))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(

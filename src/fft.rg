@@ -18,6 +18,8 @@ Regent FFT library.
 
 import "regent"
 
+local data = require("common/data")
+
 local c = regentlib.c
 local fftw_c = terralib.includec("fftw3.h")
 terralib.linklibrary("libfftw3.so")
@@ -68,6 +70,8 @@ function fft.generate_fft_interface(itype, dtype)
     return base_pointer
   end
 
+  local plan_dft = fftw_c["fftw_plan_dft_" .. dim .. "d"]
+
   -- Important: overwrites input/output!
   __demand(__inline)
   task iface.make_plan(input : region(ispace(itype), dtype),
@@ -76,9 +80,11 @@ function fft.generate_fft_interface(itype, dtype)
     regentlib.assert(input.ispace.bounds == output.ispace.bounds, "input and output regions must be identical in size")
     var input_base = get_base(rect_t(input.ispace.bounds), __physical(input)[0], __fields(input)[0])
     var output_base = get_base(rect_t(output.ispace.bounds), __physical(output)[0], __fields(output)[0])
+    var lo = input.ispace.bounds.lo:to_point()
+    var hi = input.ispace.bounds.hi:to_point()
     return iface.plan {
-      fftw_c.fftw_plan_dft_1d(
-        input.ispace.volume,
+      plan_dft(
+        [data.range(dim):map(function(i) return rexpr hi.x[i] - lo.x[i] + 1 end end)],
         [&fftw_c.fftw_complex](input_base),
         [&fftw_c.fftw_complex](output_base),
         fftw_c.FFTW_FORWARD,
@@ -102,17 +108,4 @@ function fft.generate_fft_interface(itype, dtype)
   return iface
 end
 
-local fft1d = fft.generate_fft_interface(int1d, complex64)
-
-task main()
-  var r = region(ispace(int1d, 128), complex64)
-  var s = region(ispace(int1d, 128), complex64)
-  fill(r, 0)
-  fill(s, 0)
-  var p = fft1d.make_plan(r, s)
-  fill(r, 0)
-  fill(s, 0)
-  fft1d.execute_plan(r, s, p)
-  fft1d.destroy_plan(p)
-end
-regentlib.start(main)
+return fft
