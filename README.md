@@ -56,3 +56,7 @@ these.
 
   * FFTW's planner is *not thread-safe*, but this isn't currently
     protected by a lock in the Regent wrapper.
+
+  * FFT operations are backed by FFTW, so at the moment the run
+    CPU-only and only on a single node. (OpenMP is hypothetically
+    possible, but I haven't tested it yet.)
