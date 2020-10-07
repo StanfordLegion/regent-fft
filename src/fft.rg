@@ -131,6 +131,11 @@ function fft.generate_fft_interface(itype, dtype)
   task iface.get_num_nodes()
     var f = c.legion_runtime_select_tunable_value(__runtime(), __context(), DEFAULT_TUNABLE_NODE_COUNT, 0, 0)
     var n = __future(int64, f)
+
+    -- FIXME (Elliott): I thought Regent was supposed to copy on
+    -- assignment, but that seems not to happen here, so this would
+    -- result in a double destroy if we free here.
+
     -- c.legion_future_destroy(f)
     return n
   end
