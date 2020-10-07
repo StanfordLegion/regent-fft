@@ -103,8 +103,7 @@ function fft.generate_fft_interface(itype, dtype)
   __demand(__inline)
   task iface.make_plan(input : region(ispace(itype), dtype),
                        output : region(ispace(itype), dtype),
-                       plan : region(ispace(int1d), iface.plan),
-                       optimize : int)
+                       plan : region(ispace(int1d), iface.plan))
   where reads writes(input, output, plan) do
     var p = iface.get_plan(plan, false)
 
@@ -116,10 +115,7 @@ function fft.generate_fft_interface(itype, dtype)
     var output_base = get_base(rect_t(output.ispace.bounds), __physical(output)[0], __fields(output)[0])
     var lo = input.ispace.bounds.lo:to_point()
     var hi = input.ispace.bounds.hi:to_point()
-    var flags = fftw_c.FFTW_ESTIMATE
-    if optimize > 0 then
-      flags = fftw_c.FFTW_MEASURE
-    end
+    var flags = fftw_c.FFTW_MEASURE
     @p = iface.plan {
       p = plan_dft(
         [data.range(dim):map(function(i) return rexpr hi.x[i] - lo.x[i] + 1 end end)],
@@ -133,10 +129,9 @@ function fft.generate_fft_interface(itype, dtype)
 
   task iface.make_plan_task(input : region(ispace(itype), dtype),
                             output : region(ispace(itype), dtype),
-                            plan : region(ispace(int1d), iface.plan),
-                            optimize : int)
+                            plan : region(ispace(int1d), iface.plan))
   where reads writes(input, output, plan) do
-    iface.make_plan(input, output, plan, optimize)
+    iface.make_plan(input, output, plan)
   end
 
 
@@ -161,8 +156,7 @@ function fft.generate_fft_interface(itype, dtype)
                                output : region(ispace(itype), dtype),
                                output_part : partition(disjoint, output, ispace(int1d)),
                                plan : region(ispace(int1d), iface.plan),
-                               plan_part : partition(disjoint, plan, ispace(int1d)),
-                               optimize : int)
+                               plan_part : partition(disjoint, plan, ispace(int1d)))
   where reads writes(input, output, plan) do
     var n = iface.get_num_nodes()
     regentlib.assert(input_part.colors.bounds.hi - input_part.colors.bounds.lo + 1 == int1d(n), "input_part colors size must be equal to the number of nodes")
@@ -174,7 +168,7 @@ function fft.generate_fft_interface(itype, dtype)
 
     __demand(__index_launch)
     for i in plan_part.colors do
-      iface.make_plan_task(input_part[i], output_part[i], plan_part[i], optimize)
+      iface.make_plan_task(input_part[i], output_part[i], plan_part[i])
     end
   end
 
