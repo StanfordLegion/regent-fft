@@ -27,7 +27,16 @@ terralib.linklibrary("libfftw3.so")
 -- Hack: get defines from fftw3.h
 fftw_c.FFTW_FORWARD = -1
 fftw_c.FFTW_BACKWARD = 1
-fftw_c.FFTW_ESTIMATE = 2 ^ 6
+
+fftw_c.FFTW_MEASURE = 0
+fftw_c.FFTW_DESTROY_INPUT = (2 ^ 0)
+fftw_c.FFTW_UNALIGNED = (2 ^ 1)
+fftw_c.FFTW_CONSERVE_MEMORY = (2 ^ 2)
+fftw_c.FFTW_EXHAUSTIVE = (2 ^ 3) -- NO_EXHAUSTIVE is default
+fftw_c.FFTW_PRESERVE_INPUT = (2 ^ 4) -- cancels FFTW_DESTROY_INPUT
+fftw_c.FFTW_PATIENT = (2 ^ 5) -- IMPATIENT is default
+fftw_c.FFTW_ESTIMATE = (2 ^ 6)
+fftw_c.FFTW_WISDOM_ONLY = (2 ^ 21)
 
 local fft = {}
 
@@ -94,7 +103,8 @@ function fft.generate_fft_interface(itype, dtype)
   __demand(__inline)
   task iface.make_plan(input : region(ispace(itype), dtype),
                        output : region(ispace(itype), dtype),
-                       plan : region(ispace(int1d), iface.plan))
+                       plan : region(ispace(int1d), iface.plan),
+                       optimize : int)
   where reads writes(input, output, plan) do
     var p = iface.get_plan(plan, false)
 
@@ -106,22 +116,27 @@ function fft.generate_fft_interface(itype, dtype)
     var output_base = get_base(rect_t(output.ispace.bounds), __physical(output)[0], __fields(output)[0])
     var lo = input.ispace.bounds.lo:to_point()
     var hi = input.ispace.bounds.hi:to_point()
+    var flags = fftw_c.FFTW_ESTIMATE
+    if optimize > 0 then
+      flags = fftw_c.FFTW_MEASURE
+    end
     @p = iface.plan {
       p = plan_dft(
         [data.range(dim):map(function(i) return rexpr hi.x[i] - lo.x[i] + 1 end end)],
         [&fftw_c.fftw_complex](input_base),
         [&fftw_c.fftw_complex](output_base),
         fftw_c.FFTW_FORWARD,
-        fftw_c.FFTW_ESTIMATE),
+        flags),
       address_space = address_space,
     }
   end
 
   task iface.make_plan_task(input : region(ispace(itype), dtype),
                             output : region(ispace(itype), dtype),
-                            plan : region(ispace(int1d), iface.plan))
+                            plan : region(ispace(int1d), iface.plan),
+                            optimize : int)
   where reads writes(input, output, plan) do
-    iface.make_plan(input, output, plan)
+    iface.make_plan(input, output, plan, optimize)
   end
 
 
@@ -146,7 +161,8 @@ function fft.generate_fft_interface(itype, dtype)
                                output : region(ispace(itype), dtype),
                                output_part : partition(disjoint, output, ispace(int1d)),
                                plan : region(ispace(int1d), iface.plan),
-                               plan_part : partition(disjoint, plan, ispace(int1d)))
+                               plan_part : partition(disjoint, plan, ispace(int1d)),
+                               optimize : int)
   where reads writes(input, output, plan) do
     var n = iface.get_num_nodes()
     regentlib.assert(input_part.colors.bounds.hi - input_part.colors.bounds.lo + 1 == int1d(n), "input_part colors size must be equal to the number of nodes")
@@ -158,7 +174,7 @@ function fft.generate_fft_interface(itype, dtype)
 
     __demand(__index_launch)
     for i in plan_part.colors do
-      iface.make_plan_task(input_part[i], output_part[i], plan_part[i])
+      iface.make_plan_task(input_part[i], output_part[i], plan_part[i], optimize)
     end
   end
 
