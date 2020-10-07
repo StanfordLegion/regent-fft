@@ -60,3 +60,15 @@ these.
   * FFT operations are backed by FFTW, so at the moment the run
     CPU-only and only on a single node. (OpenMP is hypothetically
     possible, but I haven't tested it yet.)
+
+  * Optimization: Currently we take the approach of "always measure"
+    with FFTW. This isn't even an option with cuFFT. Should this be
+    exposed?
+
+  * Missing features:
+      * strides
+      * batches
+      * complex32
+      * backwards
+      * split
+      * real
