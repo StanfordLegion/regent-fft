@@ -39,8 +39,14 @@ def driver(thread_count):
     fftw_build = os.path.join(root_dir, fftw_basename, 'build')
     fftw_install = os.path.join(root_dir, fftw_basename, 'install')
 
-    os.remove(fftw_tar)
-    shutil.rmtree(fftw_src)
+    try:
+        os.remove(fftw_tar)
+    except OSError:
+        pass
+    try:
+        shutil.rmtree(fftw_src)
+    except OSError:
+        pass
     download(fftw_tar, 'http://www.fftw.org/%s.tar.gz' % fftw_basename, '59831bd4b2705381ee395e54aa6e0069b10c3626')
     subprocess.check_call(['tar', 'xfz', fftw_tar], cwd=root_dir)
     os.mkdir(fftw_build)
