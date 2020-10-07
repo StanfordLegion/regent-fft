@@ -72,6 +72,22 @@ function fft.generate_fft_interface(itype, dtype)
     return base_pointer
   end
 
+  __demand(__inline)
+  task iface.get_plan(plan : region(ispace(int1d), iface.plan), check : bool) : int1d(iface.plan, plan)
+  where reads(plan) do
+    var i = c.legion_processor_address_space(
+      c.legion_runtime_get_executing_processor(__runtime(), __context()))
+    var p : int1d(iface.plan, plan)
+    var bounds = plan.ispace.bounds
+    if bounds.hi - bounds.lo + 1 > int1d(1) then
+      p = &plan[bounds.lo + i]
+    else
+      p = &plan[bounds.lo]
+    end
+    regentlib.assert(not check or p.address_space == i, "plans can only be used on the node where they are originally created")
+    return p
+  end
+
   local plan_dft = fftw_c["fftw_plan_dft_" .. dim .. "d"]
 
   -- Important: overwrites input/output!
@@ -80,11 +96,7 @@ function fft.generate_fft_interface(itype, dtype)
                        output : region(ispace(itype), dtype),
                        plan : region(ispace(int1d), iface.plan))
   where reads writes(input, output, plan) do
-    var p : int1d(iface.plan, plan)
-    for x in plan do
-      p = x
-      break
-    end
+    var p = iface.get_plan(plan, false)
 
     var address_space = c.legion_processor_address_space(
       c.legion_runtime_get_executing_processor(__runtime(), __context()))
@@ -119,7 +131,7 @@ function fft.generate_fft_interface(itype, dtype)
   task iface.get_num_nodes()
     var f = c.legion_runtime_select_tunable_value(__runtime(), __context(), DEFAULT_TUNABLE_NODE_COUNT, 0, 0)
     var n = __future(int64, f)
-    c.legion_future_destroy(f)
+    -- c.legion_future_destroy(f)
     return n
   end
 
@@ -136,25 +148,13 @@ function fft.generate_fft_interface(itype, dtype)
     regentlib.assert(input_part.colors.bounds == output_part.colors.bounds, "input_part and output_part colors must be equal")
     regentlib.assert(input_part.colors.bounds == plan_part.colors.bounds, "input_part and plan_part colors must be equal")
 
+    fill(plan.p, [fftw_c.fftw_plan](0))
+    fill(plan.address_space, -1)
+
+    __demand(__index_launch)
     for i in plan_part.colors do
       iface.make_plan_task(input_part[i], output_part[i], plan_part[i])
     end
-  end
-
-  __demand(__inline)
-  task iface.get_plan(plan : region(ispace(int1d), iface.plan)) : int1d(iface.plan, plan)
-  where reads(plan) do
-    var i = c.legion_processor_address_space(
-      c.legion_runtime_get_executing_processor(__runtime(), __context()))
-    var p : int1d(iface.plan, plan)
-    var bounds = plan.ispace.bounds
-    if bounds.hi - bounds.lo + 1 > int1d(1) then
-      p = &plan[bounds.lo + i]
-    else
-      p = &plan[bounds.lo]
-    end
-    regentlib.assert(p.address_space == i, "plans can only be used on the node where they are originally created")
-    return p
   end
 
   __demand(__inline)
@@ -162,7 +162,7 @@ function fft.generate_fft_interface(itype, dtype)
                           output : region(ispace(itype), dtype),
                           plan : region(ispace(int1d), iface.plan))
   where reads(input, plan), writes(output) do
-    var p = iface.get_plan(plan)
+    var p = iface.get_plan(plan, true)
     var input_base = get_base(rect_t(input.ispace.bounds), __physical(input)[0], __fields(input)[0])
     var output_base = get_base(rect_t(output.ispace.bounds), __physical(output)[0], __fields(output)[0])
     fftw_c.fftw_execute_dft(p.p, [&fftw_c.fftw_complex](input_base), [&fftw_c.fftw_complex](output_base))
@@ -171,11 +171,7 @@ function fft.generate_fft_interface(itype, dtype)
   __demand(__inline)
   task iface.destroy_plan(plan : region(ispace(int1d), iface.plan))
   where reads writes(plan) do
-    var p = iface.get_plan(plan)
-    var address_space = c.legion_processor_address_space(
-      c.legion_runtime_get_executing_processor(__runtime(), __context()))
-    regentlib.assert(p.address_space == address_space, "plans can only be used on the node where they are originally created")
-
+    var p = iface.get_plan(plan, true)
     fftw_c.fftw_destroy_plan(p.p)
   end
 
