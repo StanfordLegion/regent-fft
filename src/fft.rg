@@ -141,7 +141,7 @@ function fft.generate_fft_interface(itype, dtype)
     end
   end
 
-  -- __demand(__inline)
+  __demand(__inline)
   task iface.get_plan(plan : region(ispace(int1d), iface.plan)) : int1d(iface.plan, plan)
   where reads(plan) do
     var i = c.legion_processor_address_space(
