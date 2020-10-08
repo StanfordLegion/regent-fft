@@ -19,10 +19,18 @@ Regent FFT library.
 import "regent"
 
 local data = require("common/data")
+local cudahelper = require("regent/cudahelper")
 
 local c = regentlib.c
 local fftw_c = terralib.includec("fftw3.h")
 terralib.linklibrary("libfftw3.so")
+
+local use_cuda = cudahelper.check_cuda_available()
+local cufft_c
+if use_cuda then
+  cufft_c = terralib.includec("cufft.h")
+  terralib.linklibrary("libcufft.so")
+end
 
 -- Hack: get defines from fftw3.h
 fftw_c.FFTW_FORWARD = -1
@@ -53,10 +61,19 @@ function fft.generate_fft_interface(itype, dtype)
 
   local iface = {}
 
-  local fspace iface_plan {
-    p : fftw_c.fftw_plan,
-    address_space : c.legion_address_space_t,
-  }
+  local iface_plan
+  if use_cuda then
+    fspace iface_plan {
+      p : fftw_c.fftw_plan,
+      cufft_p : cufft_c.cufftHandle,
+      address_space : c.legion_address_space_t,
+    }
+  else
+    fspace iface_plan {
+      p : fftw_c.fftw_plan,
+      address_space : c.legion_address_space_t,
+    }
+  end
   iface.plan = iface_plan
 
   local terra get_base(rect : rect_t,
@@ -99,6 +116,41 @@ function fft.generate_fft_interface(itype, dtype)
 
   local plan_dft = fftw_c["fftw_plan_dft_" .. dim .. "d"]
 
+  local task make_plan_gpu(input : region(ispace(itype), dtype),
+                           output : region(ispace(itype), dtype)) : cufft_c.cufftHandle
+  where reads writes(input, output) do
+    regentlib.assert(false, "make_plan_gpu must be executed on a GPU processor")
+  end
+
+  local __demand(__cuda, __leaf)
+  task make_plan_gpu_cuda(input : region(ispace(itype), dtype),
+                          output : region(ispace(itype), dtype)) : cufft_c.cufftHandle
+  where reads writes(input, output) do
+    -- var address_space = c.legion_processor_address_space(
+    --   c.legion_runtime_get_executing_processor(__runtime(), __context()))
+    -- regentlib.assert(p.address_space == address_space, "make_plan_gpu must be executed on a processor in the same address space")
+
+    var input_base = get_base(rect_t(input.ispace.bounds), __physical(input)[0], __fields(input)[0])
+    var output_base = get_base(rect_t(output.ispace.bounds), __physical(output)[0], __fields(output)[0])
+    var lo = input.ispace.bounds.lo:to_point()
+    var hi = input.ispace.bounds.hi:to_point()
+    var n : int[dim]
+    ;[data.range(dim):map(function(i) return rquote n[i] = hi.x[i] - lo.x[i] + 1 end end)]
+    var cufft_p : cufft_c.cufftHandle
+    var ok = cufft_c.cufftPlanMany(
+      &cufft_p,
+      dim,
+      &n[0],
+      [&int](0), 0, 0, -- inembed, istride, idist
+      [&int](0), 0, 0, -- onembed, ostride, odist
+      cufft_c.CUFFT_C2C,
+      1 -- batch
+    )
+    regentlib.assert(ok == cufft_c.CUFFT_SUCCESS, "cufftPlanMany failed")
+    return cufft_p
+  end
+  make_plan_gpu:set_cuda_variant(make_plan_gpu_cuda:get_cuda_variant())
+
   -- Important: overwrites input/output!
   __demand(__inline)
   task iface.make_plan(input : region(ispace(itype), dtype),
@@ -116,15 +168,20 @@ function fft.generate_fft_interface(itype, dtype)
     var lo = input.ispace.bounds.lo:to_point()
     var hi = input.ispace.bounds.hi:to_point()
     var flags = fftw_c.FFTW_MEASURE
-    @p = iface.plan {
-      p = plan_dft(
-        [data.range(dim):map(function(i) return rexpr hi.x[i] - lo.x[i] + 1 end end)],
-        [&fftw_c.fftw_complex](input_base),
-        [&fftw_c.fftw_complex](output_base),
-        fftw_c.FFTW_FORWARD,
-        flags),
-      address_space = address_space,
-    }
+    p.p = plan_dft(
+      [data.range(dim):map(function(i) return rexpr hi.x[i] - lo.x[i] + 1 end end)],
+      [&fftw_c.fftw_complex](input_base),
+      [&fftw_c.fftw_complex](output_base),
+      fftw_c.FFTW_FORWARD,
+      flags)
+    p.address_space = address_space
+    ;[(function()
+         if use_cuda then
+           return rquote p.cufft_p = make_plan_gpu(input, output) end
+         else
+           return rquote end
+         end
+       end)()]
   end
 
   task iface.make_plan_task(input : region(ispace(itype), dtype),
