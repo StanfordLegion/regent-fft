@@ -59,7 +59,7 @@ fft1d.make_plan(r, s, p)
 and `s`. This is mandated by FFTW, which Regent FFT uses on CPUs. In
 order to avoid overwriting data, the user must either initialize the
 plan prior to loading the regions with data, or else must create a
-temporary region (of the same size and shape as the real one) for use
+temporary region (of the same size and layout as the real one) for use
 in initialization.
 
 Note that, like all non-distributed mode tasks, `make_plan` is a
