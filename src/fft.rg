@@ -98,11 +98,17 @@ function fft.generate_fft_interface(itype, dtype)
     return base_pointer
   end
 
+  local terra get_executing_processor(runtime : c.legion_runtime_t)
+    var ctx = c.legion_runtime_get_context()
+    var result = c.legion_runtime_get_executing_processor(runtime, ctx)
+    c.legion_context_destroy(ctx)
+    return result
+  end
+
   __demand(__inline)
   task iface.get_plan(plan : region(ispace(int1d), iface.plan), check : bool) : int1d(iface.plan, plan)
   where reads(plan) do
-    var i = c.legion_processor_address_space(
-      c.legion_runtime_get_executing_processor(__runtime(), __context()))
+    var i = c.legion_processor_address_space(get_executing_processor(__runtime()))
     var p : int1d(iface.plan, plan)
     var bounds = plan.ispace.bounds
     if bounds.hi - bounds.lo + 1 > int1d(1) then
@@ -116,40 +122,38 @@ function fft.generate_fft_interface(itype, dtype)
 
   local plan_dft = fftw_c["fftw_plan_dft_" .. dim .. "d"]
 
-  local task make_plan_gpu(input : region(ispace(itype), dtype),
-                           output : region(ispace(itype), dtype)) : cufft_c.cufftHandle
-  where reads writes(input, output) do
-    regentlib.assert(false, "make_plan_gpu must be executed on a GPU processor")
-  end
-
   local __demand(__cuda, __leaf)
-  task make_plan_gpu_cuda(input : region(ispace(itype), dtype),
-                          output : region(ispace(itype), dtype)) : cufft_c.cufftHandle
+  task make_plan_gpu(input : region(ispace(itype), dtype),
+                     output : region(ispace(itype), dtype),
+                     address_space : c.legion_address_space_t) : cufft_c.cufftHandle
   where reads writes(input, output) do
-    -- var address_space = c.legion_processor_address_space(
-    --   c.legion_runtime_get_executing_processor(__runtime(), __context()))
-    -- regentlib.assert(p.address_space == address_space, "make_plan_gpu must be executed on a processor in the same address space")
+    var proc = get_executing_processor(__runtime())
+    if c.legion_processor_kind(proc) == c.TOC_PROC then
+      var i = c.legion_processor_address_space(proc)
+      regentlib.assert(address_space == i, "make_plan_gpu must be executed on a processor in the same address space")
 
-    var input_base = get_base(rect_t(input.ispace.bounds), __physical(input)[0], __fields(input)[0])
-    var output_base = get_base(rect_t(output.ispace.bounds), __physical(output)[0], __fields(output)[0])
-    var lo = input.ispace.bounds.lo:to_point()
-    var hi = input.ispace.bounds.hi:to_point()
-    var n : int[dim]
-    ;[data.range(dim):map(function(i) return rquote n[i] = hi.x[i] - lo.x[i] + 1 end end)]
-    var cufft_p : cufft_c.cufftHandle
-    var ok = cufft_c.cufftPlanMany(
-      &cufft_p,
-      dim,
-      &n[0],
-      [&int](0), 0, 0, -- inembed, istride, idist
-      [&int](0), 0, 0, -- onembed, ostride, odist
-      cufft_c.CUFFT_C2C,
-      1 -- batch
-    )
-    regentlib.assert(ok == cufft_c.CUFFT_SUCCESS, "cufftPlanMany failed")
-    return cufft_p
+      var input_base = get_base(rect_t(input.ispace.bounds), __physical(input)[0], __fields(input)[0])
+      var output_base = get_base(rect_t(output.ispace.bounds), __physical(output)[0], __fields(output)[0])
+      var lo = input.ispace.bounds.lo:to_point()
+      var hi = input.ispace.bounds.hi:to_point()
+      var n : int[dim]
+      ;[data.range(dim):map(function(i) return rquote n[i] = hi.x[i] - lo.x[i] + 1 end end)]
+      var cufft_p : cufft_c.cufftHandle
+      var ok = cufft_c.cufftPlanMany(
+        &cufft_p,
+        dim,
+        &n[0],
+        [&int](0), 0, 0, -- inembed, istride, idist
+        [&int](0), 0, 0, -- onembed, ostride, odist
+        cufft_c.CUFFT_C2C,
+        1 -- batch
+      )
+      regentlib.assert(ok == cufft_c.CUFFT_SUCCESS, "cufftPlanMany failed")
+      return cufft_p
+    else
+      regentlib.assert(false, "make_plan_gpu must be executed on a GPU processor")
+    end
   end
-  make_plan_gpu:set_cuda_variant(make_plan_gpu_cuda:get_cuda_variant())
 
   -- Important: overwrites input/output!
   __demand(__inline)
@@ -160,7 +164,7 @@ function fft.generate_fft_interface(itype, dtype)
     var p = iface.get_plan(plan, false)
 
     var address_space = c.legion_processor_address_space(
-      c.legion_runtime_get_executing_processor(__runtime(), __context()))
+      get_executing_processor(__runtime()))
 
     regentlib.assert(input.ispace.bounds == output.ispace.bounds, "input and output regions must be identical in size")
     var input_base = get_base(rect_t(input.ispace.bounds), __physical(input)[0], __fields(input)[0])
@@ -177,7 +181,7 @@ function fft.generate_fft_interface(itype, dtype)
     p.address_space = address_space
     ;[(function()
          if use_cuda then
-           return rquote p.cufft_p = make_plan_gpu(input, output) end
+           return rquote p.cufft_p = make_plan_gpu(input, output, address_space) end
          else
            return rquote end
          end
