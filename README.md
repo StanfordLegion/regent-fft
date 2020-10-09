@@ -38,10 +38,10 @@ local fft1d = fft.generate_fft_interface(int1d, complex64)
 
 Like many FFT libraries, Regent FFT requires the use of *plans*. Plans
 are specific to the sizes of the input and output regions being used,
-as well as the machine node the plan is initialized on. Currently
-*these assumptions are the responsibility of the user*.
+as well as the machine node the plan is initialized on. Currently *the
+enforcement of these assumptions is the responsibility of the user*.
 
-The exact way that a plan is initialized depends on the usage mode. In
+The way that a plan is initialized depends on the usage mode. In
 general, plans are stored in a region which is managed by the
 user. The plan region may be a subregion and need not start at zero,
 but it must contain at least a number of elements depending on the
