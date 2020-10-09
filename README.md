@@ -10,6 +10,17 @@ source env.sh
 
 ## Usage
 
+Regent FFT currently supports two distinct classes of use cases:
+
+ 1. Every machine in a distributed job executes an independent FFT of a different size. (Use the "non-distributed" API below.)
+ 2. Every machine in a distributed job executes an independent FFT of the same size. (Use the "distributed" API below.)
+
+In the future we may add support for collective FFTs where multiple
+machines cooperate to jointly compute a single FFT which is too large
+to fit in any single node's memory.
+
+## Non-Distributed API
+
 In order to use the FFT library, you must first initialize it for the
 specific number of dimensions and data type you are interested
 in. Currently only 1 to 3 dimensions and `complex64` are supported.
@@ -51,6 +62,10 @@ Note: all of the tasks in the FFT library are inline tasks. That means
 they will execute in the same context, synchronously blocking the
 parent task. If you want asynchronous execute, use a task to call
 these.
+
+## Distributed API
+
+TODO
 
 ## Caveats
 
