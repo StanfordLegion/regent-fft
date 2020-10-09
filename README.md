@@ -72,3 +72,19 @@ these.
       * backwards
       * split
       * real
+
+  * Multi-GPU is probably not supported right now because cuFFT plans
+    are (probably) tied to a context for a specific GPU.
+
+## Implementation Notes
+
+  * In a distributed execution, plans need to be collected into a big
+    region in order to allow load-balancing (and flexible mapping in
+    general). This means all nodes need to be executing FFTs of the
+    same size. If this isn't the case, then plans can be created
+    locally (with the non-distributed API) but then the FFT cannot be
+    moved for execution somewhere else.
+
+  * Plans for the GPU need to go in zero-copy memory so that they can
+    be accessed by the CPU thread which is assigned to execute the
+    task
