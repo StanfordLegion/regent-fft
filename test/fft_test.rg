@@ -34,13 +34,6 @@ task test1d()
   fft1d.destroy_plan(p)
 end
 
-task fft1d_task(r : region(ispace(int1d), complex64),
-                s : region(ispace(int1d), complex64),
-                p : region(ispace(int1d), fft1d.plan))
-where reads(r, p), writes(s) do
-  fft1d.execute_plan(r, s, p)
-end
-
 __demand(__inline)
 task test1d_distrib()
   var n = fft1d.get_num_nodes()
@@ -58,7 +51,7 @@ task test1d_distrib()
   fill(s, 0)
   __demand(__index_launch)
   for i in r_part.colors do
-    fft1d_task(r_part[i], s_part[i], p_part[i])
+    fft1d.execute_plan_task(r_part[i], s_part[i], p_part[i])
   end
   fft1d.destroy_plan_distrib(p, p_part)
 end
@@ -76,13 +69,6 @@ task test2d()
   fill(s, 0)
   fft2d.execute_plan(r, s, p)
   fft2d.destroy_plan(p)
-end
-
-task fft2d_task(r : region(ispace(int2d), complex64),
-                s : region(ispace(int2d), complex64),
-                p : region(ispace(int1d), fft2d.plan))
-where reads(r, p), writes(s) do
-  fft2d.execute_plan(r, s, p)
 end
 
 __demand(__inline)
@@ -106,7 +92,7 @@ task test2d_distrib()
   fill(s, 0)
   __demand(__index_launch)
   for i in r_part.colors do
-    fft2d_task(r_part[i], s_part[i], p_part[i])
+    fft2d.execute_plan_task(r_part[i], s_part[i], p_part[i])
   end
   fft2d.destroy_plan_distrib(p, p_part)
 end
