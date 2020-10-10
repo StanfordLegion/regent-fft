@@ -16,6 +16,8 @@ import "regent"
 
 local fft = require("fft")
 
+local cmapper = require("test_mapper")
+
 local fft1d = fft.generate_fft_interface(int1d, complex64)
 local fft2d = fft.generate_fft_interface(int2d, complex64)
 
@@ -103,4 +105,4 @@ task main()
   test2d()
   test2d_distrib()
 end
-regentlib.start(main)
+regentlib.start(main, cmapper.register_mappers)
