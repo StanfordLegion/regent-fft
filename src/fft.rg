@@ -152,7 +152,13 @@ function fft.generate_fft_interface(itype, dtype)
   __demand(__inline)
   task iface.get_plan(plan : region(ispace(int1d), iface.plan), check : bool) : &iface.plan
   where reads(plan) do
-    -- Hack: need to use raw access to circument CUDA checker here.
+    -- Hack: 3Bneed to use raw access to circument CUDA checker here.
+    var pr = __physical(plan)[0]
+    regentlib.assert(c.legion_physical_region_get_memory_count(pr) == 1, "plan instance has more than one memory?")
+    var mem_kind = c.legion_memory_kind(c.legion_physical_region_get_memory(pr, 0))
+    regentlib.assert(
+      mem_kind == c.SYSTEM_MEM or mem_kind == c.REGDMA_MEM or mem_kind == c.Z_COPY_MEM,
+      "plan instance must be stored in sysmem, regmem, or zero copy mem")
     var plan_base = get_base_plan(rect_plan_t(plan.ispace.bounds), __physical(plan)[0], __fields(plan)[0])
     var i = c.legion_processor_address_space(get_executing_processor(__runtime()))
     var p : &iface.plan
