@@ -51,7 +51,7 @@ task test1d_distrib()
   fill(s, 0)
   __demand(__index_launch)
   for i in r_part.colors do
-    fft1d.execute_plan_task(r_part[i], s_part[i], p_part[i])
+    fft1d.execute_plan_task(r_part[i], s_part[i], p)
   end
   fft1d.destroy_plan_distrib(p, p_part)
 end
@@ -92,7 +92,7 @@ task test2d_distrib()
   fill(s, 0)
   __demand(__index_launch)
   for i in r_part.colors do
-    fft2d.execute_plan_task(r_part[i], s_part[i], p_part[i])
+    fft2d.execute_plan_task(r_part[i], s_part[i], p)
   end
   fft2d.destroy_plan_distrib(p, p_part)
 end
