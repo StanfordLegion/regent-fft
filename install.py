@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # Copyright 2020 Stanford University
 #
@@ -24,7 +24,7 @@ def download(dest_path, url, sha1):
     subprocess.check_call(['wget', '-O', dest_path, url])
     shasum = subprocess.Popen(
         ['shasum', '--check'], stdin=subprocess.PIPE, cwd=dest_dir)
-    shasum.communicate('%s  %s' % (sha1, dest_file))
+    shasum.communicate(('%s  %s' % (sha1, dest_file)).encode())
     assert shasum.wait() == 0
 
 def driver(thread_count):
