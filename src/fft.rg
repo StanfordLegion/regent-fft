@@ -284,8 +284,8 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
       var output_base = get_base_out(rect_out_t(output.ispace.bounds), __physical(output)[0], __fields(output)[0]).base
       var lo = input.ispace.bounds.lo:to_point()
       var hi = input.ispace.bounds.hi:to_point()
-      var n : int[dim] -- n is an array of size dim with the size of each dimension in the entries
-      [data.range(dim):map(function(i) return rquote n[i] = hi.x[i] - lo.x[i] + 1 end end)]
+      var n : int[dim]
+      ;[data.range(dim):map(function(i) return rquote n[i] = hi.x[i] - lo.x[i] + 1 end end)]
 
       -- Create plans
       if float_to_complex32_transform then
@@ -451,7 +451,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
     p.address_space = address_space
 
     var n : int[dim]
-    [data.range(dim):map(function(i) return rquote n[i] = hi.x[i] - lo.x[i] + 1 end end)]
+    ;[data.range(dim):map(function(i) return rquote n[i] = hi.x[i] - lo.x[i] + 1 end end)]
 
     -- For batched transforms, we want to exclude the last dimension as that is
     -- the number of batches.

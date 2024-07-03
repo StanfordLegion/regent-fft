@@ -20,8 +20,8 @@ sudo apt-get install nvidia-utils-515
 
 export CUDA="/usr/local/cuda"
 export CUDA_PATH="/usr/local/cuda"
-export PATH="$CUDA_PATH/bin:$PATH"
-export LD_LIBRARY_PATH="$CUDA_PATH/lib:$CUDA_PATH/lib64:$LD_LIBRARY_PATH"
+export PATH="$PATH:$CUDA_PATH/bin"
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$CUDA_PATH/lib:$CUDA_PATH/lib64"
 
 git clone --depth 1 --branch master https://gitlab.com/StanfordLegion/legion.git
 CC=gcc CXX=g++ USE_GASNET=0 USE_CUDA=1 DEBUG=${DEBUG} MAX_DIM=4 ./legion/language/scripts/setup_env.py
