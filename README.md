@@ -18,8 +18,8 @@ The CPU mode is powered by [FFTW](https://www.fftw.org/), and the GPU mode by
 
 Both Complex-to-Complex and Real-To-Complex transformations are supported.
 
-Both single-precision and double-precision modes are supported i.e. both `float`
-/ `complex32` and `double` / `complex64` types.
+Both single-precision and double-precision modes are supported (i.e., both `float`
+/ `complex32` and `double` / `complex64` types).
 
 Batched transforms are also supported.
 
@@ -88,10 +88,11 @@ To generate a specific instance of the library, use `fft.generate_fft_interface(
 - The second argument is the data type of the input: `complex64`, `complex32`,
   `float`, or `double`.
 - The third argument is the data type of the output: `complex64` or `complex32`.
+- The fourth argument is a flag for batched transforms: `false` in regular mode, and `true` in batched mode.
 
 ```lua
 local fft = require("fft")
-local fft1d = fft.generate_fft_interface(int1d, complex64, complex64)
+local fft1d = fft.generate_fft_interface(int1d, complex64, complex64, false)
 ```
 
 #### 2. Make Plan
@@ -130,7 +131,7 @@ The way that a plan is initialized depends on the usage mode. In
 general, plans are stored in a region which is managed by the
 user. The plan region may be a subregion and need not start at zero,
 but it must contain at least a number of elements depending on the
-mode: 1 in non-distributed mode, `N` in distributed mode where `N` is
+mode: 1 in non-distributed mode, and `N` in distributed mode - where `N` is
 the number of nodes.
 
 In non-distributed mode, the plan region can be initialized as follows:
@@ -190,21 +191,20 @@ Batched transforms allow users to perform multiple transforms of the same size s
 To illustrate how to perform a batched transform, let us use the example where
 you want to perform 7 batches of a 256 x 256 transform.
 
-Since the transform is a 2D one, the user creates a interface with `itype` of
-dimension N+1: in this case, an `int3d`. The last dimension is used to store the
-number of batches.
+Since the transform is a 2D one, the user creates a interface with `itype` of the same
+dimension: in this case, an `int2d`. Be sure to pass in `true` as the fourth argument to indicate we are performing a batched transform.
 
 ```lua
-local fft2d_batch_complex64_complex64 = fft.generate_fft_interface(int3d, complex64, complex64)
+local fft2d_batch_complex64_complex64 = fft.generate_fft_interface(int2d, complex64, complex64, true)
 ```
 
-The input and output regions should be 256 x 256 x 7 arrays: i.e., the last
+The input and output regions should be of dimension 'N+1', in this case 256 x 256 x 7. The size of the last
 dimension is the number of batches. The plan region remains the same as before:
 
 ```lua
 var r = region(ispace(int3d, {256, 256, 7}), complex64)
 var s = region(ispace(int3d, {256, 256, 7}), complex64)
-var p = region(ispace(int1d, 1), fft3d_batch_real.plan)
+var p = region(ispace(int1d, 1), fft2d_batch_double_complex64.plan)
 ```
 
 The key difference is that we call `make_plan_batch` instead of `make_plan`.
@@ -220,13 +220,9 @@ fft2d_batch_complex64_complex64.execute_plan(r, s, p)
 fft2d_batch_complex64_complex64.destroy_plan(p)
 ```
 
-As you can see, the main points of differentiation from the regular transform
-API is that we input a region of dimension `n+1`, where the final dimension is
-the number of batches, and use `make_plan_batch` instead of `make_plan`.
-
 Please also refer to the `test_2d_complex64_to_complex64_batch_transform` and
-`test_2d_double_to_complex64_batch_transform` examples in `fft_test.rg` for
-reference.
+`test_2d_double_to_complex64_batch_transform` examples in `fft_test.rg` for further
+examples.
 
 #### 6. Distributed Mode
 
