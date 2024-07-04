@@ -126,6 +126,21 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
   local double_to_complex64_transform = (dtype_in == double and dtype_out == complex64)
   local complex64_to_complex64_transform = (dtype_in == complex64 and dtype_out == complex64)
 
+  local cufft_transform_type
+  if gpu_available then
+    if float_to_complex32_transform then
+      cufft_transform_type = cufft_c.CUFFT_R2C
+    elseif complex32_to_complex32_transform then
+      cufft_transform_type = cufft_c.CUFFT_C2C
+    elseif double_to_complex64_transform then
+      cufft_transform_type = cufft_c.CUFFT_D2Z
+    elseif complex64_to_complex64_transform then
+      cufft_transform_type = cufft_c.CUFFT_Z2Z
+    else
+      assert(false, "unexpected type combination " .. tostring(dtype_in) .. " and " .. tostring(dtype_out))
+    end
+  end
+
   local iface = {}
 
   -- Create fspaces depending on whether GPUs are used or not
@@ -288,15 +303,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
       ;[data.range(dim):map(function(i) return rquote n[i] = hi.x[i] - lo.x[i] + 1 end end)]
 
       -- Create plans
-      if float_to_complex32_transform then
-        cufft_assert(cufft_c.cufftPlanMany(&p.cufft_p, dim, &n[0], [&int](0), 0, 0, [&int](0), 0, 0, cufft_c.CUFFT_R2C, 1))
-      elseif complex32_to_complex32_transform then
-        cufft_assert(cufft_c.cufftPlanMany(&p.cufft_p, dim, &n[0], [&int](0), 0, 0, [&int](0), 0, 0, cufft_c.CUFFT_C2C, 1))
-      elseif double_to_complex64_transform then
-        cufft_assert(cufft_c.cufftPlanMany(&p.cufft_p, dim, &n[0], [&int](0), 0, 0, [&int](0), 0, 0, cufft_c.CUFFT_D2Z, 1))
-      elseif complex64_to_complex64_transform then
-        cufft_assert(cufft_c.cufftPlanMany(&p.cufft_p, dim, &n[0], [&int](0), 0, 0, [&int](0), 0, 0, cufft_c.CUFFT_Z2Z, 1))
-      end
+      cufft_assert(cufft_c.cufftPlanMany(&p.cufft_p, dim, &n[0], [&int](0), 0, 0, [&int](0), 0, 0, cufft_transform_type, 1))
     end
   end
 
@@ -320,7 +327,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
     var hi = input.ispace.bounds.hi:to_point()
 
     var n : int[dim]
-    [data.range(dim):map(function(i) return rquote n[i] = hi.x[i] - lo.x[i] + 1 end end)]
+    ;[data.range(dim):map(function(i) return rquote n[i] = hi.x[i] - lo.x[i] + 1 end end)]
 
     if float_to_complex32_transform then
       p.float_p = fftw_c.fftwf_plan_dft_r2c(dim, &n[0], [&float](input_base), [&fftw_c.fftwf_complex](output_base), fftw_c.FFTW_ESTIMATE)
@@ -366,7 +373,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
       var hi = input.ispace.bounds.hi:to_point()
 
       var n : int[dim]
-      [data.range(dim):map(function(i) return rquote n[i] = hi.x[i] - lo.x[i] + 1 end end)]
+      ;[data.range(dim):map(function(i) return rquote n[i] = hi.x[i] - lo.x[i] + 1 end end)]
 
       -- For batched transforms, we want to exclude the last dimension as that
       -- is the number of batches.
@@ -392,15 +399,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
 
       var istride = offset_in[0].offset / dtype_size_in
 
-      if float_to_complex32_transform then
-        cufft_assert(cufft_c.cufftPlanMany(&p.cufft_p, dim-1, &n_batch[0], &n_batch[0], istride, i_dist, &n_batch[0], istride, i_dist, cufft_c.CUFFT_R2C, n[dim-1]))
-      elseif complex32_to_complex32_transform then
-        cufft_assert(cufft_c.cufftPlanMany(&p.cufft_p, dim-1, &n_batch[0], &n_batch[0], istride, i_dist, &n_batch[0], istride, i_dist, cufft_c.CUFFT_C2C, n[dim-1]))
-      elseif double_to_complex64_transform then
-        cufft_assert(cufft_c.cufftPlanMany(&p.cufft_p, dim-1, &n_batch[0], &n_batch[0], istride, i_dist, &n_batch[0], istride, i_dist, cufft_c.CUFFT_D2Z, n[dim-1]))
-      elseif complex64_to_complex64_transform then
-        cufft_assert(cufft_c.cufftPlanMany(&p.cufft_p, dim-1, &n_batch[0], &n_batch[0], istride, i_dist, &n_batch[0], istride, i_dist, cufft_c.CUFFT_Z2Z, n[dim-1]))
-      end
+      cufft_assert(cufft_c.cufftPlanMany(&p.cufft_p, dim-1, &n_batch[0], &n_batch[0], istride, i_dist, &n_batch[0], istride, i_dist, cufft_transform_type, n[dim-1]))
     end
   end
 
