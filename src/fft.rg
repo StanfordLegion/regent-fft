@@ -126,16 +126,36 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
   local double_to_complex64_transform = (dtype_in == double and dtype_out == complex64)
   local complex64_to_complex64_transform = (dtype_in == complex64 and dtype_out == complex64)
 
-  local cufft_transform_type
+  local cufft_plan_transform_type
+  local cufft_execute_function
+  local cufft_execute_from_type
+  local cufft_execute_to_type
+  local cufft_execute_extra_args
   if gpu_available then
     if float_to_complex32_transform then
-      cufft_transform_type = cufft_c.CUFFT_R2C
+      cufft_plan_transform_type = cufft_c.CUFFT_R2C
+      cufft_execute_function = cufft_c.cufftExecR2C
+      cufft_execute_from_type = cufft_c.cufftReal
+      cufft_execute_to_type = cufft_c.cufftComplex
+      cufft_execute_extra_args = terralib.newlist({})
     elseif complex32_to_complex32_transform then
-      cufft_transform_type = cufft_c.CUFFT_C2C
+      cufft_plan_transform_type = cufft_c.CUFFT_C2C
+      cufft_execute_function = cufft_c.cufftExecC2C
+      cufft_execute_from_type = cufft_c.cufftComplex
+      cufft_execute_to_type = cufft_c.cufftComplex
+      cufft_execute_extra_args = terralib.newlist({cufft_c.CUFFT_FORWARD})
     elseif double_to_complex64_transform then
-      cufft_transform_type = cufft_c.CUFFT_D2Z
+      cufft_plan_transform_type = cufft_c.CUFFT_D2Z
+      cufft_execute_function = cufft_c.cufftExecD2Z
+      cufft_execute_from_type = cufft_c.cufftDoubleReal
+      cufft_execute_to_type = cufft_c.cufftDoubleComplex
+      cufft_execute_extra_args = terralib.newlist({})
     elseif complex64_to_complex64_transform then
-      cufft_transform_type = cufft_c.CUFFT_Z2Z
+      cufft_plan_transform_type = cufft_c.CUFFT_Z2Z
+      cufft_execute_function = cufft_c.cufftExecZ2Z
+      cufft_execute_from_type = cufft_c.cufftDoubleComplex
+      cufft_execute_to_type = cufft_c.cufftDoubleComplex
+      cufft_execute_extra_args = terralib.newlist({cufft_c.CUFFT_FORWARD})
     else
       assert(false, "unexpected type combination " .. tostring(dtype_in) .. " and " .. tostring(dtype_out))
     end
@@ -303,7 +323,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
       ;[data.range(dim):map(function(i) return rquote n[i] = hi.x[i] - lo.x[i] + 1 end end)]
 
       -- Create plans
-      cufft_assert(cufft_c.cufftPlanMany(&p.cufft_p, dim, &n[0], [&int](0), 0, 0, [&int](0), 0, 0, cufft_transform_type, 1))
+      cufft_assert(cufft_c.cufftPlanMany(&p.cufft_p, dim, &n[0], [&int](0), 0, 0, [&int](0), 0, 0, cufft_plan_transform_type, 1))
     end
   end
 
@@ -399,7 +419,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
 
       var istride = offset_in[0].offset / dtype_size_in
 
-      cufft_assert(cufft_c.cufftPlanMany(&p.cufft_p, dim-1, &n_batch[0], &n_batch[0], istride, i_dist, &n_batch[0], istride, i_dist, cufft_transform_type, n[dim-1]))
+      cufft_assert(cufft_c.cufftPlanMany(&p.cufft_p, dim-1, &n_batch[0], &n_batch[0], istride, i_dist, &n_batch[0], istride, i_dist, cufft_plan_transform_type, n[dim-1]))
     end
   end
 
@@ -552,15 +572,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
       var input_base = get_base_in(rect_in_t(input.ispace.bounds), __physical(input)[0], __fields(input)[0]).base
       var output_base = get_base_out(rect_out_t(output.ispace.bounds), __physical(output)[0], __fields(output)[0]).base
 
-      if float_to_complex32_transform then
-        cufft_assert(cufft_c.cufftExecR2C(p.cufft_p, [&cufft_c.cufftReal](input_base), [&cufft_c.cufftComplex](output_base)))
-      elseif complex32_to_complex32_transform then
-        cufft_assert(cufft_c.cufftExecC2C(p.cufft_p, [&cufft_c.cufftComplex](input_base), [&cufft_c.cufftComplex](output_base), cufft_c.CUFFT_FORWARD))
-      elseif double_to_complex64_transform then
-        cufft_assert(cufft_c.cufftExecD2Z(p.cufft_p, [&cufft_c.cufftDoubleReal](input_base), [&cufft_c.cufftDoubleComplex](output_base)))
-      elseif complex64_to_complex64_transform then
-        cufft_assert(cufft_c.cufftExecZ2Z(p.cufft_p, [&cufft_c.cufftDoubleComplex](input_base), [&cufft_c.cufftDoubleComplex](output_base), cufft_c.CUFFT_FORWARD))
-      end
+      cufft_assert(cufft_execute_function(p.cufft_p, [&cufft_execute_from_type](input_base), [&cufft_execute_to_type](output_base), cufft_execute_extra_args))
     end
   end
 
@@ -609,7 +621,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
   -- @param plan Plan object used to execute plan.
   task iface.execute_plan_task(input : region(ispace(itype), dtype_in),
                                output : region(ispace(itype), dtype_out),
-                              plan : region(ispace(int1d), iface.plan))
+                               plan : region(ispace(int1d), iface.plan))
   where reads writes (input, output, plan) do
     iface.execute_plan(input, output, plan)
   end
@@ -623,11 +635,11 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
   -- @param plan_part Plan partition.
   __demand(__inline)
   task iface.execute_plan_distrib(input : region(ispace(itype), dtype_in),
-                               input_part : partition(disjoint, input, ispace(int1d)),
-                               output : region(ispace(itype), dtype_out),
-                               output_part : partition(disjoint, output, ispace(int1d)),
-                               plan : region(ispace(int1d), iface.plan),
-                               plan_part : partition(disjoint, plan, ispace(int1d)))
+                                  input_part : partition(disjoint, input, ispace(int1d)),
+                                  output : region(ispace(itype), dtype_out),
+                                  output_part : partition(disjoint, output, ispace(int1d)),
+                                  plan : region(ispace(int1d), iface.plan),
+                                  plan_part : partition(disjoint, plan, ispace(int1d)))
   where reads writes(input, output, plan) do
     __demand(__index_launch)
     for i in input_part.colors do
