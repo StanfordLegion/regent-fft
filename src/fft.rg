@@ -26,8 +26,6 @@ local gpu_available = gpuhelper.check_gpu_available()
 -- Import C and FFTW APIs
 local c = regentlib.c
 local fftw_c = terralib.includec("fftw3.h")
-regentlib.linklibrary("libfftw3.so")
-regentlib.linklibrary("libfftw3f.so")
 
 -- Import cuFFT API
 local cufft_c
@@ -133,9 +131,11 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
   local fftw_plan_handle_type
   local fftw_destroy_plan_function
   if single_precision then
+    regentlib.linklibrary("libfftw3f.so")
     fftw_plan_handle_type = fftw_c.fftwf_plan
     fftw_destroy_plan_function = fftw_c.fftwf_destroy_plan
   elseif double_precision then
+    regentlib.linklibrary("libfftw3.so")
     fftw_plan_handle_type = fftw_c.fftw_plan
     fftw_destroy_plan_function = fftw_c.fftw_destroy_plan
   end
