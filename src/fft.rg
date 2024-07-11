@@ -604,7 +604,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
                           output : region(ispace(itype), dtype_out),
                           plan : region(ispace(int1d), iface.plan),
                           address_space : c.legion_address_space_t)
-    where reads writes(input, output, plan) do
+    where reads(input, plan), writes(output) do
       var p = iface.get_plan(plan, true)
       var proc = get_executing_processor(__runtime())
       regentlib.assert(c.legion_processor_kind(proc) == c.TOC_PROC, "execute_plan_gpu must be executed on a GPU processor")
@@ -627,7 +627,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
   task iface.execute_plan(input : region(ispace(itype), dtype_in),
                           output : region(ispace(itype), dtype_out),
                           plan : region(ispace(int1d), iface.plan))
-  where reads writes (input, output, plan) do
+  where reads(input, plan), writes(output) do
     var p = iface.get_plan(plan, true)
     var address_space = c.legion_processor_address_space(get_executing_processor(__runtime()))
     var input_base = get_base_in(rect_in_t(input.ispace.bounds), __physical(input)[0], __fields(input)[0]).base
@@ -655,7 +655,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
   task iface.execute_plan_task(input : region(ispace(itype), dtype_in),
                                output : region(ispace(itype), dtype_out),
                                plan : region(ispace(int1d), iface.plan))
-  where reads writes (input, output, plan) do
+  where reads(input, plan), writes(output) do do
     iface.execute_plan(input, output, plan)
   end
 
@@ -673,7 +673,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
                                   output_part : partition(disjoint, output, ispace(int1d)),
                                   plan : region(ispace(int1d), iface.plan),
                                   plan_part : partition(disjoint, plan, ispace(int1d)))
-  where reads writes(input, output, plan) do
+  where reads(input, plan), writes(output) do do
     __demand(__index_launch)
     for i in input_part.colors do
       iface.execute_plan_task(input_part[i], output_part[i], plan_part[i])
