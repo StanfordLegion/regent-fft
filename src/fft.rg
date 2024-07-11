@@ -126,6 +126,63 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
   local double_to_complex64_transform = (dtype_in == double and dtype_out == complex64)
   local complex64_to_complex64_transform = (dtype_in == complex64 and dtype_out == complex64)
 
+  -- For precision checks
+  local single_precision = (float_to_complex32_transform or complex32_to_complex32_transform)
+  local double_precision = (double_to_complex64_transform or complex64_to_complex64_transform)
+
+  local fftw_plan_handle_type
+  local fftw_destroy_plan_function
+  if single_precision then
+    fftw_plan_handle_type = fftw_c.fftwf_plan
+    fftw_destroy_plan_function = fftw_c.fftwf_destroy_plan
+  elseif double_precision then
+    fftw_plan_handle_type = fftw_c.fftw_plan
+    fftw_destroy_plan_function = fftw_c.fftw_destroy_plan
+  end
+
+  local fftw_transform_from_type
+  local fftw_transform_to_type
+  local fftw_plan_function
+  local fftw_plan_extra_args
+  local fftw_plan_batch_function
+  local fftw_plan_batch_extra_args
+  local fftw_execute_function
+  if float_to_complex32_transform then
+    fftw_transform_from_type = float
+    fftw_transform_to_type = fftw_c.fftwf_complex
+    fftw_plan_function = fftw_c.fftwf_plan_dft_r2c
+    fftw_plan_extra_args = terralib.newlist({fftw_c.FFTW_ESTIMATE})
+    fftw_plan_batch_function = fftw_c.fftwf_plan_many_dft_r2c
+    fftw_plan_batch_extra_args = terralib.newlist({fftw_c.FFTW_ESTIMATE})
+    fftw_execute_function = fftw_c.fftwf_execute_dft_r2c
+  elseif complex32_to_complex32_transform then
+    fftw_transform_from_type = fftw_c.fftwf_complex
+    fftw_transform_to_type = fftw_c.fftwf_complex
+    fftw_plan_function = fftw_c.fftwf_plan_dft
+    fftw_plan_extra_args = terralib.newlist({fftw_c.FFTW_FORWARD, fftw_c.FFTW_ESTIMATE})
+    fftw_plan_batch_function = fftw_c.fftwf_plan_many_dft
+    fftw_plan_batch_extra_args = terralib.newlist({fftw_c.FFTW_FORWARD, fftw_c.FFTW_ESTIMATE})
+    fftw_execute_function = fftw_c.fftwf_execute_dft
+  elseif double_to_complex64_transform then
+    fftw_transform_from_type = double
+    fftw_transform_to_type = fftw_c.fftw_complex
+    fftw_plan_function = fftw_c.fftw_plan_dft_r2c
+    fftw_plan_extra_args = terralib.newlist({fftw_c.FFTW_ESTIMATE})
+    fftw_plan_batch_function = fftw_c.fftw_plan_many_dft_r2c
+    fftw_plan_batch_extra_args = terralib.newlist({fftw_c.FFTW_ESTIMATE})
+    fftw_execute_function = fftw_c.fftw_execute_dft_r2c
+  elseif complex64_to_complex64_transform then
+    fftw_transform_from_type = fftw_c.fftw_complex
+    fftw_transform_to_type = fftw_c.fftw_complex
+    fftw_plan_function = fftw_c.fftw_plan_dft
+    fftw_plan_extra_args = terralib.newlist({fftw_c.FFTW_FORWARD, fftw_c.FFTW_ESTIMATE})
+    fftw_plan_batch_function = fftw_c.fftw_plan_many_dft
+    fftw_plan_batch_extra_args = terralib.newlist({fftw_c.FFTW_FORWARD, fftw_c.FFTW_ESTIMATE})
+    fftw_execute_function = fftw_c.fftw_execute_dft
+  else
+    assert(false, "unexpected type combination " .. tostring(dtype_in) .. " and " .. tostring(dtype_out))
+  end
+
   local cufft_plan_transform_type
   local cufft_execute_function
   local cufft_execute_from_type
@@ -167,15 +224,13 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
   local iface_plan
   if gpu_available then
     fspace iface_plan {
-      p : fftw_c.fftw_plan,
-      float_p : fftw_c.fftwf_plan,
+      p : fftw_plan_handle_type,
       cufft_p : cufft_c.cufftHandle,
       address_space : c.legion_address_space_t,
     }
   else
     fspace iface_plan {
-      p : fftw_c.fftw_plan,
-      float_p : fftw_c.fftwf_plan,
+      p : fftw_plan_handle_type,
       address_space : c.legion_address_space_t,
     }
   end
@@ -349,15 +404,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
     var n : int[dim]
     ;[data.range(dim):map(function(i) return rquote n[i] = hi.x[i] - lo.x[i] + 1 end end)]
 
-    if float_to_complex32_transform then
-      p.float_p = fftw_c.fftwf_plan_dft_r2c(dim, &n[0], [&float](input_base), [&fftw_c.fftwf_complex](output_base), fftw_c.FFTW_ESTIMATE)
-    elseif complex32_to_complex32_transform then
-      p.float_p = fftw_c.fftwf_plan_dft(dim, &n[0], [&fftw_c.fftwf_complex](input_base), [&fftw_c.fftwf_complex](output_base), fftw_c.FFTW_FORWARD, fftw_c.FFTW_ESTIMATE)
-    elseif double_to_complex64_transform then
-      p.p = fftw_c.fftw_plan_dft_r2c(dim, &n[0], [&double](input_base), [&fftw_c.fftw_complex](output_base), fftw_c.FFTW_ESTIMATE)
-    elseif complex64_to_complex64_transform then
-      p.p = fftw_c.fftw_plan_dft(dim, &n[0], [&fftw_c.fftw_complex](input_base), [&fftw_c.fftw_complex](output_base), fftw_c.FFTW_FORWARD, fftw_c.FFTW_ESTIMATE)
-    end
+    p.p = fftw_plan_function(dim, &n[0], [&fftw_transform_from_type](input_base), [&fftw_transform_to_type](output_base), fftw_plan_extra_args)
 
     p.address_space = address_space
 
@@ -381,7 +428,6 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
                              plan : region(ispace(int1d), iface.plan),
                              address_space : c.legion_address_space_t)
     where reads writes(input, output, plan) do
-
       var p = iface.get_plan(plan, true)
       var proc = get_executing_processor(__runtime())
       regentlib.assert(c.legion_processor_kind(proc) == c.TOC_PROC, "make_plan_gpu_batch must be executed on a GPU processor")
@@ -433,7 +479,6 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
                              output : region(ispace(itype), dtype_out),
                              plan : region(ispace(int1d), iface.plan))
   where reads writes(input, output, plan) do
-
     var p = iface.get_plan(plan, false)
 
     var address_space = c.legion_processor_address_space(get_executing_processor(__runtime()))
@@ -479,15 +524,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
       n_batch[i] = n[i]
     end
 
-    if float_to_complex32_transform then
-      p.float_p = fftw_c.fftwf_plan_dft_r2c(dim, &n[0], [&float](input_base), [&fftw_c.fftwf_complex](output_base), fftw_c.FFTW_ESTIMATE)
-    elseif complex32_to_complex32_transform then
-      p.float_p = fftw_c.fftwf_plan_dft(dim, &n[0], [&fftw_c.fftwf_complex](input_base), [&fftw_c.fftwf_complex](output_base), fftw_c.FFTW_FORWARD, fftw_c.FFTW_ESTIMATE)
-    elseif double_to_complex64_transform then
-      p.p = fftw_c.fftw_plan_many_dft_r2c(dim-1, &n_batch[0], n[dim-1], [&double](input_base), &n_batch[0], istride, i_dist, [&fftw_c.fftw_complex](output_base), &n_batch[0], istride, i_dist, fftw_c.FFTW_ESTIMATE)
-    elseif complex64_to_complex64_transform then
-      p.p = fftw_c.fftw_plan_many_dft(dim-1, &n_batch[0], n[dim-1], [&fftw_c.fftw_complex](input_base), &n_batch[0], istride, i_dist, [&fftw_c.fftw_complex](output_base), &n_batch[0], istride, i_dist,  fftw_c.FFTW_FORWARD, fftw_c.FFTW_ESTIMATE)
-    end
+    p.p = fftw_plan_batch_function(dim-1, &n_batch[0], n[dim-1], [&fftw_transform_from_type](input_base), &n_batch[0], istride, i_dist, [&fftw_transform_to_type](output_base), &n_batch[0], istride, i_dist, fftw_plan_batch_extra_args)
 
     rescape
       if gpu_available then
@@ -526,7 +563,6 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
                                plan : region(ispace(int1d), iface.plan),
                                plan_part : partition(disjoint, plan, ispace(int1d)))
   where reads writes(input, output, plan) do
-
     -- Get number of nodes and check consistency of nodes/colors
     var n = iface.get_num_nodes()
     regentlib.assert(input_part.colors.bounds.hi - input_part.colors.bounds.lo + 1 == int1d(n), "input_part colors size must be equal to the number of nodes")
@@ -534,7 +570,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
     regentlib.assert(input_part.colors.bounds == plan_part.colors.bounds, "input_part and plan_part colors must be equal")
 
     var p : iface.plan
-    p.p = [fftw_c.fftw_plan](0)
+    p.p = [fftw_plan_handle_type](0)
 
     rescape
       if gpu_available then
@@ -563,7 +599,6 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
                           plan : region(ispace(int1d), iface.plan),
                           address_space : c.legion_address_space_t)
     where reads writes (input, output, plan) do
-
       var p = iface.get_plan(plan, true)
       var proc = get_executing_processor(__runtime())
       regentlib.assert(c.legion_processor_kind(proc) == c.TOC_PROC, "execute_plan_gpu must be executed on a GPU processor")
@@ -592,15 +627,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
     var input_base = get_base_in(rect_in_t(input.ispace.bounds), __physical(input)[0], __fields(input)[0]).base
     var output_base = get_base_out(rect_out_t(output.ispace.bounds), __physical(output)[0], __fields(output)[0]).base
 
-    if float_to_complex32_transform then
-      fftw_c.fftwf_execute_dft_r2c(p.float_p, [&float](input_base), [&fftw_c.fftwf_complex](output_base))
-    elseif complex32_to_complex32_transform then
-      fftw_c.fftwf_execute_dft(p.float_p, [&fftw_c.fftwf_complex](input_base), [&fftw_c.fftwf_complex](output_base))
-    elseif double_to_complex64_transform then
-      fftw_c.fftw_execute_dft_r2c(p.p, [&double](input_base), [&fftw_c.fftw_complex](output_base))
-    elseif complex64_to_complex64_transform then
-      fftw_c.fftw_execute_dft(p.p, [&fftw_c.fftw_complex](input_base), [&fftw_c.fftw_complex](output_base))
-    end
+    fftw_execute_function(p.p, [&fftw_transform_from_type](input_base), [&fftw_transform_to_type](output_base))
 
     p.address_space = address_space
 
@@ -653,9 +680,9 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
   local destroy_plan_gpu
   if gpu_available then
     __demand(__cuda, __leaf)
-    task destroy_plan_gpu(plan : region(ispace(int1d), iface.plan), address_space : c.legion_address_space_t)
+    task destroy_plan_gpu(plan : region(ispace(int1d), iface.plan),
+                          address_space : c.legion_address_space_t)
     where reads writes(plan) do
-
       var p = iface.get_plan(plan, true)
       var proc = get_executing_processor(__runtime())
 
@@ -673,8 +700,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
   where reads writes(plan) do
     var p = iface.get_plan(plan, true)
     var address_space = c.legion_processor_address_space(get_executing_processor(__runtime()))
-    fftw_c.fftw_destroy_plan(p.p)
-    fftw_c.fftwf_destroy_plan(p.float_p)
+    fftw_destroy_plan_function(p.p)
     p.address_space = address_space
 
     -- Call GPU version if applicable
