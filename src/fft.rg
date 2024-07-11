@@ -655,7 +655,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
   task iface.execute_plan_task(input : region(ispace(itype), dtype_in),
                                output : region(ispace(itype), dtype_out),
                                plan : region(ispace(int1d), iface.plan))
-  where reads(input, plan), writes(output) do do
+  where reads(input, plan), writes(output) do
     iface.execute_plan(input, output, plan)
   end
 
@@ -673,7 +673,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
                                   output_part : partition(disjoint, output, ispace(int1d)),
                                   plan : region(ispace(int1d), iface.plan),
                                   plan_part : partition(disjoint, plan, ispace(int1d)))
-  where reads(input, plan), writes(output) do do
+  where reads(input, plan), writes(output) do
     __demand(__index_launch)
     for i in input_part.colors do
       iface.execute_plan_task(input_part[i], output_part[i], plan_part[i])
