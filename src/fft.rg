@@ -598,7 +598,7 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
                           output : region(ispace(itype), dtype_out),
                           plan : region(ispace(int1d), iface.plan),
                           address_space : c.legion_address_space_t)
-    where reads writes (input, output, plan) do
+    where reads writes(input, output, plan) do
       var p = iface.get_plan(plan, true)
       var proc = get_executing_processor(__runtime())
       regentlib.assert(c.legion_processor_kind(proc) == c.TOC_PROC, "execute_plan_gpu must be executed on a GPU processor")
