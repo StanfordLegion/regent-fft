@@ -113,8 +113,8 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
       itype = int3d
     elseif itype == int3d then
       itype = int4d
-    else 
-      assert(false)
+    else
+      assert(false, "unexpected index type " .. tostring(itype))
     end
   end
 
@@ -140,8 +140,8 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
     regentlib.linklibrary("libfftw3.so")
     fftw_plan_handle_type = fftw_c.fftw_plan
     fftw_destroy_plan_function = fftw_c.fftw_destroy_plan
-  else 
-    assert(false)
+  else
+    assert(false, "only single and double precisions are supported for FFTW")
   end
 
   local fftw_transform_from_type
@@ -465,7 +465,8 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
         i_dist = offset_3 / offset_1
       elseif dim == 4 then
         i_dist = offset_in[3].offset / offset_1
-      else regentlib.assert(dim == 2 or dim == 3 or dim == 4, "dimension of input with additional batch dimension added must be 2, 3 or 4")
+      else
+        regentlib.assert(dim == 2 or dim == 3 or dim == 4, "dimension of input with additional batch dimension added must be 2, 3 or 4")
       end
 
       var istride = offset_in[0].offset / dtype_size_in
@@ -510,7 +511,8 @@ function fft.generate_fft_interface(itype_input, dtype_in, dtype_out, batch_flag
       i_dist = offset_3/offset_1
     elseif dim == 4 then
       i_dist = offset_in[3].offset/offset_1
-    else regentlib.assert(dim == 2 or dim == 3 or dim == 4, "dimension of input with additional batch dimension added must be 2, 3 or 4")
+    else
+      regentlib.assert(dim == 2 or dim == 3 or dim == 4, "dimension of input with additional batch dimension added must be 2, 3 or 4")
     end
 
     var istride = offset_1 / dtype_in_size
